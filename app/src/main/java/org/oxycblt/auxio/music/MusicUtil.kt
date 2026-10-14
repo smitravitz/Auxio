@@ -152,6 +152,7 @@ fun ReleaseType.resolve(context: Context) =
         is ReleaseType.Mix -> context.getString(R.string.lbl_mix)
         is ReleaseType.Mixtape -> context.getString(R.string.lbl_mixtape)
         is ReleaseType.Demo -> context.getString(R.string.lbl_demo)
+        is ReleaseType.Broadcast -> context.getString(R.string.lbl_broadcast)
     }
 
 fun Format.resolve(context: Context): String =

@@ -101,6 +101,15 @@ sealed interface ReleaseType {
             get() = null
     }
 
+    /**
+     * A broadcast. An episodic release originally aired on radio, television, or the internet,
+     * such as a TV episode, radio show, or podcast.
+     */
+    data object Broadcast : ReleaseType {
+        override val refinement: Refinement?
+            get() = null
+    }
+
     /** A specification of what kind of performance a particular release is. */
     enum class Refinement {
         /** A release consisting of a live performance */
@@ -126,6 +135,8 @@ sealed interface ReleaseType {
                 primary.equals("album", true) -> types.parseSecondaryTypes(1) { Album(it) }
                 primary.equals("ep", true) -> types.parseSecondaryTypes(1) { EP(it) }
                 primary.equals("single", true) -> types.parseSecondaryTypes(1) { Single(it) }
+                // Broadcasts are episodic, so secondary types like "live" don't apply.
+                primary.equals("broadcast", true) -> Broadcast
                 // The spec makes no mention of whether primary types are a pre-requisite for
                 // secondary types, so we assume that it's not and map oprhan secondary types
                 // to Album release types.

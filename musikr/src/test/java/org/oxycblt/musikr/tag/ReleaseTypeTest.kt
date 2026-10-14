@@ -100,4 +100,13 @@ class ReleaseTypeTest {
             ReleaseType.parse(listOf("remix")),
         )
     }
+
+    @Test
+    fun releaseType_parse_broadcast() {
+        assertEquals(ReleaseType.Broadcast, ReleaseType.parse(listOf("broadcast")))
+        assertEquals(ReleaseType.Broadcast, ReleaseType.parse(listOf("Broadcast")))
+        // Secondary types are ignored for broadcasts
+        assertEquals(ReleaseType.Broadcast, ReleaseType.parse(listOf("broadcast", "live")))
+        assertEquals(ReleaseType.Broadcast, ReleaseType.parse(listOf("broadcast", "compilation")))
+    }
 }
