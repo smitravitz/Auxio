@@ -50,8 +50,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.music.MusicRepository
+import org.oxycblt.auxio.music.kind
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.persist.PersistenceRepository
+import org.oxycblt.auxio.playback.persist.ResumePoints
 import org.oxycblt.auxio.playback.replaygain.ReplayGainAudioProcessor
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackCommand
@@ -77,6 +79,7 @@ class ExoPlaybackStateHolder(
     private val replayGainProcessor: ReplayGainAudioProcessor,
     private val musicRepository: MusicRepository,
     private val imageSettings: ImageSettings,
+    private val resumePoints: ResumePoints,
 ) :
     PlaybackStateHolder,
     Player.Listener,
@@ -88,6 +91,7 @@ class ExoPlaybackStateHolder(
     private val restoreScope = CoroutineScope(Dispatchers.IO + saveJob)
     private var currentSaveJob: Job? = null
     private var openAudioEffectSession = false
+    private var currentResumable: Song? = null
 
     var sessionOngoing = false
         private set
@@ -247,6 +251,7 @@ class ExoPlaybackStateHolder(
     }
 
     override fun newPlayback(command: PlaybackCommand) {
+        rememberPosition()
         parent = command.parent
         player.shuffleModeEnabled = command.shuffled
         player.setMediaItems(command.queue.map { it.buildMediaItem() })
@@ -259,6 +264,7 @@ class ExoPlaybackStateHolder(
         }
         val target = startIndex ?: player.currentTimeline.getFirstWindowIndex(command.shuffled)
         player.seekTo(target, C.TIME_UNSET)
+        restorePosition()
         player.prepare()
         player.play()
         playbackManager.ack(this, StateAck.NewPlayback)
@@ -278,6 +284,7 @@ class ExoPlaybackStateHolder(
     }
 
     override fun next() {
+        rememberPosition()
         // Replicate the old pseudo-circular queue behavior when no repeat option is implemented.
         // Basically, you can't skip back and wrap around the queue, but you can skip forward and
         // wrap around the queue, albeit playback will be paused.
@@ -302,6 +309,7 @@ class ExoPlaybackStateHolder(
     }
 
     override fun prev() {
+        rememberPosition()
         if (playbackSettings.rewindWithPrev) {
             player.seekToPrevious()
         } else if (player.hasPreviousMediaItem()) {
@@ -323,6 +331,7 @@ class ExoPlaybackStateHolder(
         }
 
         val trueIndex = indices[index]
+        rememberPosition()
         player.seekTo(trueIndex, C.TIME_UNSET) // Handles remaining custom logic
         if (!playbackSettings.rememberPause) {
             player.play()
@@ -391,6 +400,9 @@ class ExoPlaybackStateHolder(
 
         val trueIndex = indices[at]
         val songWillChange = player.currentMediaItemIndex == trueIndex
+        if (songWillChange) {
+            rememberPosition()
+        }
         player.removeMediaItem(trueIndex)
         if (songWillChange && !playbackSettings.rememberPause) {
             player.play()
@@ -468,6 +480,11 @@ class ExoPlaybackStateHolder(
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
         super.onPlayWhenReadyChanged(playWhenReady, reason)
 
+        if (!player.playWhenReady) {
+            // Paused: remember where we are in a show or movie.
+            rememberPosition()
+        }
+
         if (player.playWhenReady) {
             // Mark that we have started playing so that the notification can now be posted.
             L.d("Player has started playing")
@@ -498,6 +515,18 @@ class ExoPlaybackStateHolder(
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         super.onMediaItemTransition(mediaItem, reason)
+
+        // A show or movie that played to the end starts from the top next time.
+        val finished =
+            reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO ||
+                reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT
+        if (finished) {
+            currentResumable?.let { resumePoints.clear(it) }
+        }
+        currentResumable = mediaItem?.song?.takeIf { it.kind.resumable }
+        if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) {
+            restorePosition()
+        }
 
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
             playbackManager.ack(this, StateAck.IndexMoved)
@@ -561,6 +590,28 @@ class ExoPlaybackStateHolder(
     private fun updatePauseOnRepeat() {
         player.pauseAtEndOfMediaItems =
             player.repeatMode == Player.REPEAT_MODE_ONE && playbackSettings.pauseOnRepeat
+    }
+
+    // --- RESUME (SHOWS & MOVIES) ---
+
+    /** Save where we are in the current file, if it's a show or movie. */
+    private fun rememberPosition() {
+        val song = player.currentMediaItem?.song ?: return
+        if (song.kind.resumable) {
+            resumePoints.set(song, player.currentPosition)
+        }
+    }
+
+    /** Jump to where we left off in the current file, if it's a show or movie. */
+    private fun restorePosition() {
+        val song = player.currentMediaItem?.song ?: return
+        if (!song.kind.resumable) {
+            return
+        }
+        val positionMs = resumePoints.get(song)
+        if (positionMs > 0) {
+            player.seekTo(positionMs)
+        }
     }
 
     private fun save(cb: () -> Unit) {
@@ -654,6 +705,7 @@ class ExoPlaybackStateHolder(
         private val replayGainProcessor: ReplayGainAudioProcessor,
         private val musicRepository: MusicRepository,
         private val imageSettings: ImageSettings,
+        private val resumePoints: ResumePoints,
     ) {
         fun create(): ExoPlaybackStateHolder {
             // Since Auxio is a music player, only specify an audio renderer to save
@@ -698,6 +750,7 @@ class ExoPlaybackStateHolder(
                 replayGainProcessor,
                 musicRepository,
                 imageSettings,
+                resumePoints,
             )
         }
     }

@@ -21,7 +21,9 @@ package org.oxycblt.auxio.playback.state
 import javax.inject.Inject
 import org.oxycblt.auxio.list.ListSettings
 import org.oxycblt.auxio.list.sort.Sort
+import org.oxycblt.auxio.music.MediaKind
 import org.oxycblt.auxio.music.MusicRepository
+import org.oxycblt.auxio.music.kind
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.musikr.Album
 import org.oxycblt.musikr.Artist
@@ -103,7 +105,9 @@ constructor(
     override fun song(song: Song, shuffle: ShuffleMode) =
         newCommand(song, null, listOf(song), shuffle)
 
-    override fun songFromAll(song: Song, shuffle: ShuffleMode) = newCommand(song, shuffle)
+    // Shows and movies aren't in "all songs", so play the rest of their folder instead.
+    override fun songFromAll(song: Song, shuffle: ShuffleMode): PlaybackCommand? =
+        if (song.kind.resumable) songFromAlbum(song, shuffle) else newCommand(song, shuffle)
 
     override fun songFromAlbum(song: Song, shuffle: ShuffleMode) =
         newCommand(song, song.album, listSettings.albumSongSort, shuffle)
@@ -152,7 +156,8 @@ constructor(
 
     private fun newCommand(song: Song?, shuffle: ShuffleMode): PlaybackCommand? {
         val library = musicRepository.library ?: return null
-        return newCommand(song, null, library.songs, listSettings.songSort, shuffle)
+        val music = library.songs.filter { it.kind == MediaKind.MUSIC }
+        return newCommand(song, null, music, listSettings.songSort, shuffle)
     }
 
     private fun newCommand(

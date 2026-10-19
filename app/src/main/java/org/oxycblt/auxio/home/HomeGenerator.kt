@@ -22,8 +22,10 @@ import javax.inject.Inject
 import org.oxycblt.auxio.home.tabs.Tab
 import org.oxycblt.auxio.list.ListSettings
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
+import org.oxycblt.auxio.music.MediaKind
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicType
+import org.oxycblt.auxio.music.kind
 import org.oxycblt.musikr.Album
 import org.oxycblt.musikr.Artist
 import org.oxycblt.musikr.Genre
@@ -151,7 +153,10 @@ private class HomeGeneratorImpl(
     override fun empty() = musicRepository.library?.empty() ?: true
 
     override fun songs() =
-        musicRepository.library?.let { listSettings.songSort.songs(it.songs) } ?: emptyList()
+        musicRepository.library?.let { library ->
+            // Shows and movies live in their folders' albums, not the main song list.
+            listSettings.songSort.songs(library.songs.filter { it.kind == MediaKind.MUSIC })
+        } ?: emptyList()
 
     override fun albums() =
         musicRepository.library?.let { listSettings.albumSort.albums(it.albums) } ?: emptyList()
