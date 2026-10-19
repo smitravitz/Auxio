@@ -151,7 +151,6 @@ private class DetailGeneratorImpl(
                             is ReleaseType.Mix -> DetailSection.Albums.Category.DJ_MIXES
                             is ReleaseType.Mixtape -> DetailSection.Albums.Category.MIXTAPES
                             is ReleaseType.Demo -> DetailSection.Albums.Category.DEMOS
-                            is ReleaseType.Broadcast -> DetailSection.Albums.Category.BROADCASTS
                         }
                 }
             }
@@ -224,7 +223,6 @@ sealed interface DetailSection {
             DJ_MIXES(R.string.lbl_mixes),
             MIXTAPES(R.string.lbl_mixtapes),
             DEMOS(R.string.lbl_demos),
-            BROADCASTS(R.string.lbl_broadcasts),
             APPEARANCES(R.string.lbl_appears_on),
             LIVE(R.string.lbl_live_group),
             REMIXES(R.string.lbl_remix_group),
